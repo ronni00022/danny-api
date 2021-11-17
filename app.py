@@ -1,50 +1,48 @@
-from flask import Flask, request, jsonify
-from secret_service import SecretService
-from secrets_model import SecretModel
-from flask_cors import cross_origin
+from flask import Flask, request, render_template
+from werkzeug.utils import secure_filename
+import cv2
+import os
 
 app = Flask(__name__)
-secretService = SecretService()
+
 
 @app.route('/', methods=['GET'])
-@cross_origin()
 def index():
     return "Welcome to API"
 
-@app.route('/secretos', methods = ['GET'])
-@cross_origin()
-def getSecrets():
-    response =  jsonify(secretService.getSecrets())
-    if response is None:
-        return jsonify({"response":"Not found", "status":404})
-    return response
+@app.route('/huella', methods=['GET'])
+def huella():
+    return render_template('index.html')
 
-@app.route('/secretos', methods = ['POST'])
-@cross_origin()
-def createUser():
-    data  = request.get_json()
-    secretsModel = SecretModel()
-    secretsModel.__dict__ = data
-    response = secretService.createSecrets(secretsModel)
-    if response is None:
-        return jsonify({"response":"Unprocessable Entity", "status":422})
-    return jsonify({"responde":"User creado exitosamente!","status":200})
+@app.route('/upload', methods=['POST'])
+def uploader():
+ if request.method == 'POST':
+  # obtenemos el archivo del input "archivo"
+  f = request.files['archivo']
+  filename = secure_filename(f.filename)
+  # Guardamos el archivo en el directorio "Imagen"
+  f.save(os.path.join('./img', filename)) 
 
-@app.route('/secretos/<id>', methods = ["GET"])
-@cross_origin()
-def getById(id):
-    if not id:
-        return None
-    response = secretService.getById(id)
-    if response is None:
-        return jsonify({"response":"Not found", "status":404})
-    return jsonify(response)
+  filename = f"./img/{f.filename}"
+  img = cv2.imread(filename, 1)
+   
+  img_YCrCb = cv2.cvtColor(img, cv2.COLOR_BGR2YCrCb)
+  YCrCb_mask = cv2.inRange(img_YCrCb, (0, 135, 85), (255, 180, 135))
+  
+  finger = cv2.bitwise_and(img, img, mask=YCrCb_mask)
+  finger = cv2.bitwise_not(finger)
 
-@app.route('/secretos', methods = ['DELETE'])
-@cross_origin()
-def deleteAll():
-    response = secretService.deleteAll()
-    return jsonify({"responde": "Datos eliminado correctamente", "status":200})
+  
+  finger = cv2.cvtColor(finger, cv2.COLOR_BGR2GRAY)
+  
+  finger = cv2.adaptiveThreshold(
+      finger, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 3, 1
+  )
+
+  cv2.imwrite(f"./files/{f.filename}", finger)
+
+  return f"<h1>Finalizado</h1>"
+        
 
 if __name__ == '__main__':
     # Threaded option to enable multiple instances for multiple user access support
